@@ -25,7 +25,7 @@ python scripts/worker.py
 ```bash
 cd ~/leo/experiments/redis-streams-lab
 source .venv/bin/activate
-python scripts/producer.py order-1 100
+python scripts/producer.py 20 --producer-id p1 --rate 2
 ```
 
 ## Inspect
@@ -37,7 +37,7 @@ cd ~/leo/experiments/redis-streams-lab
 
 ## What to notice
 
-- the event stays in the stream history
-- the worker receives it through the consumer group
-- the simulated side effect runs once
-- `XACK` removes it from pending
+- the events stay in the stream history
+- workers receive them through the consumer group
+- each simulated side effect runs once
+- each message is `XACK`ed and leaves pending

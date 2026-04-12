@@ -11,6 +11,8 @@ REDIS_PORT = 6379
 STREAM = "payments"
 GROUP = "payment-workers"
 SIMULATED_CHARGES_KEY = "simulated_charges"
+ORDER_STATE_PREFIX = "order_state:"
+ORDER_UPDATE_LOG_KEY = "order_update_log"
 CHARGES_LOG = DATA_DIR / "charges.log"
 
 

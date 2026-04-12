@@ -3,7 +3,7 @@
 ## Goal
 Reproduce the classic at-least-once failure:
 
-side effect succeeds, worker dies, message is still pending
+side effect succeeds, worker dies, message stays pending
 
 ## Reset first
 
@@ -32,7 +32,7 @@ CRASH_AFTER_SIDE_EFFECT=1 python scripts/worker.py
 ```bash
 cd ~/leo/experiments/redis-streams-lab
 source .venv/bin/activate
-python scripts/producer.py order-2 250
+python scripts/producer.py 3 --producer-id failer
 ```
 
 ## Inspect
@@ -44,7 +44,7 @@ cd ~/leo/experiments/redis-streams-lab
 
 ## What to notice
 
-- the side effect already happened once
-- the message was never acknowledged
-- Redis still shows it as pending
+- side effects already happened once
+- messages were never acknowledged
+- Redis still shows them as pending
 - this is why retries can duplicate external actions
