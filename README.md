@@ -1,31 +1,13 @@
 # Redis Streams Lab
 
-Small, visible experiments for learning Redis Streams failure semantics and concurrency behavior.
+You are now using **single-command lab runs** with compact results.
 
-## Layout
+- Run one script per lab.
+- Each script prints a concise **Verdict** first.
+- Full raw logs are still written to `/tmp`, on demand.
+- To view full raw output, run with `LAB_VERBOSE=1`.
 
-```text
-redis-streams-lab/
-├── docker-compose.yml
-├── requirements.txt
-├── data/
-├── labs/
-│   ├── 01-happy-path.md
-│   ├── 02-crash-before-ack.md
-│   ├── 03-reclaim-and-retry.md
-│   ├── 04-concurrent-ingestion-concurrency.md
-│   ├── 05-hot-key-race-contested-order.md
-│
-└── scripts/
-    ├── common.py
-    ├── inspect.sh
-    ├── order_worker.py
-    ├── producer.py
-    ├── reset.sh
-    ├── run_lab05_atomic.sh
-    ├── run_lab05_naive.sh
-    └── worker.py
-```
+---
 
 ## One-time setup
 
@@ -34,73 +16,114 @@ cd ~/leo/experiments/redis-streams-lab
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-
-docker compose up -d
 chmod +x scripts/*.sh
 ```
 
-## Run order
+---
 
-1. `labs/01-happy-path.md`
-2. `labs/02-crash-before-ack.md`
-3. `labs/03-reclaim-and-retry.md`
-4. `labs/04-concurrent-ingestion-concurrency.md`
-5. `labs/05-hot-key-race-contested-order.md`
-
-## Lab 05 one-command runs
+## Quick flow (recommended)
 
 ```bash
 cd ~/leo/experiments/redis-streams-lab
-
-# see naive race (do this first)
-HOT_ORDER_ID=order-hot-main LAB05_COUNT=80 ./scripts/run_lab05_naive.sh
-
-# see fixed behavior with atomic increment
-HOT_ORDER_ID=order-hot-main LAB05_COUNT=80 ./scripts/run_lab05_atomic.sh
+./scripts/run_lab01.sh
+./scripts/run_lab02.sh
+./scripts/run_lab03.sh
+./scripts/run_lab04.sh
+./scripts/run_lab05_naive.sh
+./scripts/run_lab05_atomic.sh
 ```
 
-You can tweak speed by overriding:
-- `LAB05_RATE` (events/sec, default 12)
-- `LAB05_JITTER_MS` (producer jitter, default 80)
-- `LAB05_UPDATE_MS` (worker delay, default 120)
-- `LAB05_WORKER_JITTER_MS` (worker jitter, default 200)
+Each command:
+- resets Redis for that lab
+- starts Redis if needed
+- starts worker(s) + producer(s)
+- runs `MONITOR` capture
+- prints a compact summary + log tails
 
-## Helper commands
+For Labs 01–04, payment events now use ids like `evt-<run_ts>:<producer>:<seq>` so they read as event/batch ids instead of looking like one shared business order.
 
-Reset lab state:
+---
+
+## Lab commands
+
+### Lab 01 — happy path
 
 ```bash
-cd ~/leo/experiments/redis-streams-lab
-./scripts/reset.sh
+./scripts/run_lab01.sh
 ```
 
-Inspect current Redis + side-effect state:
+### Lab 02 — crash before `XACK`
 
 ```bash
-cd ~/leo/experiments/redis-streams-lab
-HOT_ORDER_ID=order-hot-main ./scripts/inspect.sh
+./scripts/run_lab02.sh
 ```
 
-## What this lab is teaching
+### Lab 03 — reclaim and retry
 
-- `XADD` appends an event
-- `XREADGROUP` delivers work to one consumer in a group
-- `XACK` marks a message as processed
-- `XPENDING` shows delivered-but-not-acked work
-- `XAUTOCLAIM` reassigns stalled work
-- at-least-once delivery duplicates non-idempotent side effects unless you add a fix
-- parallel consumers can create **write contention** on shared state when processing one hot key
-- naive read-modify-write can lose updates under contention
-- atomic Lua updates protect shared numeric state from races
+```bash
+./scripts/run_lab03.sh
+```
 
-## Not included yet
+### Lab 04 — real concurrency
 
-This first cut is intentionally simple.
+```bash
+./scripts/run_lab04.sh
+```
 
-No Postgres, FastAPI, or Celery yet.
-Those come later when you want to learn:
+### Lab 05 — hot-key contention
 
-- outbox pattern
-- idempotency table
-- API producer integration
-- transaction boundaries
+```bash
+./scripts/run_lab05_naive.sh
+./scripts/run_lab05_atomic.sh
+```
+
+Optional: tune counts/rate
+
+```bash
+LAB04_COUNT=100 LAB04_RATE=10 ./scripts/run_lab04.sh
+HOT_ORDER_ID=order-hot-main LAB05_COUNT=120 LAB05_RATE=16 ./scripts/run_lab05_naive.sh
+HOT_ORDER_ID=order-hot-main LAB05_COUNT=120 LAB05_RATE=16 ./scripts/run_lab05_atomic.sh
+```
+
+Want raw logs?
+
+```bash
+LAB_VERBOSE=1 ./scripts/run_lab01.sh
+```
+
+---
+
+## How to read the output (short)
+
+Every run prints one of these quick verdict lines.
+
+- **Lab 01:** `clean happy path` means produced = consumed, no pending.
+- **Lab 02:** `crash-before-ack` means side effects happened but pending messages still exist.
+- **Lab 03:** `reclaim worked` means another worker recovered the stalled event; duplicates are possible.
+- **Lab 04:** `real concurrency observed` means work is actually split across multiple workers.
+- **Lab 05:** `atomic fix worked` means final aggregate equals expected. `lost update reproduced` means naive path dropped updates.
+
+---
+
+### Where raw logs are written
+
+| Lab | logs |
+|---|---|
+| Lab 01 | `/tmp/lab01_monitor.log`, `/tmp/lab01_worker.log`, `/tmp/lab01_producer.log` |
+| Lab 02 | `/tmp/lab02_monitor.log`, `/tmp/lab02_worker.log`, `/tmp/lab02_producer.log` |
+| Lab 03 | `/tmp/lab03_monitor.log`, `/tmp/lab03_worker1.log`, `/tmp/lab03_worker2.log`, `/tmp/lab03_producer.log`, `/tmp/lab03_claim.log` |
+| Lab 04 | `/tmp/lab04_monitor.log`, `/tmp/lab04_w1.log`, `/tmp/lab04_w2.log`, `/tmp/lab04_w3.log`, `/tmp/lab04_p1.log`, `/tmp/lab04_p2.log` |
+| Lab 05 naive | `/tmp/lab05_naive_monitor.log`, `/tmp/lab05_naive_w1.log`, `/tmp/lab05_naive_w2.log`, `/tmp/lab05_naive_pA.log`, `/tmp/lab05_naive_pB.log` |
+| Lab 05 atomic | `/tmp/lab05_atomic_monitor.log`, `/tmp/lab05_atomic_w1.log`, `/tmp/lab05_atomic_w2.log`, `/tmp/lab05_atomic_pA.log`, `/tmp/lab05_atomic_pB.log` |
+
+---
+
+## Common issue: `service "redis" is not running`
+
+Start it:
+
+```bash
+docker compose up -d redis
+```
+
+If a container exits and all scripts still fail, restart and then rerun the lab script.

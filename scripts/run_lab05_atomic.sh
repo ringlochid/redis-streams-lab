@@ -2,13 +2,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/common.sh"
 
-if [[ ! -f .venv/bin/activate ]]; then
-  echo "Missing .venv. Run: python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt" >&2
-  exit 1
-fi
-source .venv/bin/activate
+trap_cleanup
+require_venv
+lab_reset
 
 HOT_ORDER_ID="${HOT_ORDER_ID:-order-hot-main}"
 COUNT="${LAB05_COUNT:-80}"
@@ -16,52 +15,52 @@ RATE="${LAB05_RATE:-12}"
 JITTER_MS="${LAB05_JITTER_MS:-80}"
 UPDATE_MS="${LAB05_UPDATE_MS:-120}"
 JITTER_WORKER_MS="${LAB05_WORKER_JITTER_MS:-200}"
+VERBOSE="${LAB_VERBOSE:-0}"
 
-cleanup() {
-  for pid in "${WORKER_1_PID:-}" "${WORKER_2_PID:-}"; do
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-    fi
-  done
-}
-trap cleanup EXIT
+MONITOR_LOG=/tmp/lab05_atomic_monitor.log
+W1_LOG=/tmp/lab05_atomic_w1.log
+W2_LOG=/tmp/lab05_atomic_w2.log
+PA_LOG=/tmp/lab05_atomic_pA.log
+PB_LOG=/tmp/lab05_atomic_pB.log
 
-./scripts/reset.sh >/dev/null
+start_monitor "$MONITOR_LOG"
 
-export HOT_ORDER_ID
+echo "[LAB05] starting atomic"
+python scripts/order_worker.py --mode atomic --consumer worker-1 --batch 2 --process-ms "$UPDATE_MS" --jitter-ms "$JITTER_WORKER_MS" > "$W1_LOG" 2>&1 &
+register_pid "$!"
+python scripts/order_worker.py --mode atomic --consumer worker-2 --batch 2 --process-ms "$UPDATE_MS" --jitter-ms "$JITTER_WORKER_MS" > "$W2_LOG" 2>&1 &
+register_pid "$!"
 
-: > /tmp/lab05_atomic_w1.log
-: > /tmp/lab05_atomic_w2.log
-: > /tmp/lab05_atomic_pA.log
-: > /tmp/lab05_atomic_pB.log
+python scripts/producer.py "$COUNT" --mode order_update --shared-seq --hot-order-id "$HOT_ORDER_ID" --rate "$RATE" --jitter-ms "$JITTER_MS" -p pA > "$PA_LOG" 2>&1 &
+P1_PID=$!
+python scripts/producer.py "$COUNT" --mode order_update --shared-seq --hot-order-id "$HOT_ORDER_ID" --rate "$RATE" --jitter-ms "$JITTER_MS" -p pB > "$PB_LOG" 2>&1 &
+P2_PID=$!
 
-echo "[LAB05] starting atomic workers and hot stream (order=${HOT_ORDER_ID})"
-python scripts/order_worker.py --mode atomic --consumer worker-1 --batch 2 --process-ms "$UPDATE_MS" --jitter-ms "$JITTER_WORKER_MS" > /tmp/lab05_atomic_w1.log 2>&1 &
-WORKER_1_PID=$!
-python scripts/order_worker.py --mode atomic --consumer worker-2 --batch 2 --process-ms "$UPDATE_MS" --jitter-ms "$JITTER_WORKER_MS" > /tmp/lab05_atomic_w2.log 2>&1 &
-WORKER_2_PID=$!
-
-python scripts/producer.py "$COUNT" --mode order_update --shared-seq --hot-order-id "$HOT_ORDER_ID" --rate "$RATE" --jitter-ms "$JITTER_MS" -p pA > /tmp/lab05_atomic_pA.log 2>&1 &
-PRODUCER_1_PID=$!
-python scripts/producer.py "$COUNT" --mode order_update --shared-seq --hot-order-id "$HOT_ORDER_ID" --rate "$RATE" --jitter-ms "$JITTER_MS" -p pB > /tmp/lab05_atomic_pB.log 2>&1 &
-PRODUCER_2_PID=$!
-
-wait "$PRODUCER_1_PID" "$PRODUCER_2_PID"
+wait "$P1_PID" "$P2_PID"
 
 sleep 1
-HOT_ORDER_ID="$HOT_ORDER_ID" ./scripts/inspect.sh
+python scripts/summary.py lab05 --hot-order-id "$HOT_ORDER_ID"
+
+if [[ "$VERBOSE" == "1" ]]; then
+  echo
+  ./scripts/inspect.sh
+fi
+
+show_log_tail "Lab 05 atomic worker 1" "$W1_LOG"
+show_log_tail "Lab 05 atomic worker 2" "$W2_LOG"
+show_log_tail "Lab 05 atomic producer A" "$PA_LOG"
+show_log_tail "Lab 05 atomic producer B" "$PB_LOG"
+show_log_tail "Lab 05 atomic monitor" "$MONITOR_LOG" 12
 
 echo
-EXPECTED_DELTA=$(python - <<'PY'
-from scripts.common import redis_client, STREAM
-r = redis_client()
-entries = r.xrange(STREAM, "-", "+")
-sum_delta = 0
-for _, fields in entries:
-    if fields.get("event") == "order_delta":
-        sum_delta += int(fields.get("delta", "0"))
-print(sum_delta)
-PY
-)
 
-echo "[LAB05] expected total delta: $EXPECTED_DELTA"
+echo "Lab 05 raw logs:"
+echo "  /tmp/lab05_atomic_w1.log"
+echo "  /tmp/lab05_atomic_w2.log"
+echo "  /tmp/lab05_atomic_pA.log"
+echo "  /tmp/lab05_atomic_pB.log"
+echo "  /tmp/lab05_atomic_monitor.log"
+
+echo
+
+echo "[LAB05] done"

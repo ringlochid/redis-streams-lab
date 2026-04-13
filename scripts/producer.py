@@ -17,7 +17,7 @@ def looks_like_int(v: str) -> bool:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Produce events into Redis Streams")
-    p.add_argument("args", nargs="*", help="Legacy positional: [count] [base_amount|order_id]")
+    p.add_argument("args", nargs="*", help="Legacy positional: [count] [base_amount|base_id]")
     p.add_argument("--producer-id", "-p", default="p1", help="Producer label")
     p.add_argument("--rate", "-r", type=float, default=0.0, help="Events per second (0 = no pacing)")
     p.add_argument("--jitter-ms", type=int, default=0, help="Max extra random jitter per event (ms)")
@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
 
 def infer_positional(args: argparse.Namespace):
     count = 1
-    base_id = f"order-{int(time.time())}"
+    base_id = f"evt-{int(time.time())}"
     amount = 100
 
     if args.args:
