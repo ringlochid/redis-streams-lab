@@ -98,8 +98,8 @@ LAB_VERBOSE=1 ./scripts/run_lab01.sh
 Every run prints one of these quick verdict lines.
 
 - **Lab 01:** `clean happy path` means produced = consumed, no pending.
-- **Lab 02:** `crash-before-ack` means side effects happened but pending messages still exist.
-- **Lab 03:** `reclaim worked` means another worker recovered the stalled event; duplicates are possible.
+- **Lab 02:** `crash-before-ack` means side effects happened but pending messages still exist. The script now also prints a tiny proof block showing `side effect happened` + `ack not found`.
+- **Lab 03:** `reclaim worked` means another worker recovered the stalled event; duplicates are possible. The script now also prints a tiny proof block showing the same message id causing two side effects.
 - **Lab 04:** `real concurrency observed` means work is actually split across multiple workers.
 - **Lab 05:** `atomic fix worked` means final aggregate equals expected. `lost update reproduced` means naive path dropped updates.
 

@@ -27,6 +27,8 @@ python scripts/producer.py "$COUNT" --producer-id "$PRODUCER_ID" > "$PRODUCER_LO
 sleep 1
 
 python scripts/summary.py lab02
+echo
+python scripts/evidence.py lab02 --monitor-log "$MONITOR_LOG"
 
 if [[ "$VERBOSE" == "1" ]]; then
   echo

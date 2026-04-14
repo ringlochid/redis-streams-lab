@@ -35,6 +35,8 @@ register_pid "$!"
 sleep 2
 
 python scripts/summary.py lab03
+echo
+python scripts/evidence.py lab03 --monitor-log "$MONITOR_LOG"
 
 if [[ "$VERBOSE" == "1" ]]; then
   echo
